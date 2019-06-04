@@ -21,8 +21,6 @@
 static int err(pam_handle_t *pamh, int errcode, const char *msg){
 	char errbuf[100];
 	strerror_r(errno, errbuf, sizeof(errbuf));
-	char fmt[strlen(msg) + strlen(": %s") + 1];
-	sprintf(fmt, "%s: %%s", msg);
 	
 	pam_syslog(pamh, LOG_ERR, "%s: %s", msg, errbuf);
 	return errcode;
@@ -55,20 +53,7 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 	struct argv_options options;
 	if(!parse_options(pamh, &options, argc, argv)) return PAM_SERVICE_ERR;
 	//if(flags & PAM_SILENT) return PAM_IGNORE;
-	const char *item = NULL;
-	pam_get_item(pamh, PAM_RUSER, (const void**)&item);
-	pam_syslog(pamh, LOG_ERR, "ruser: %s", item);
-	pam_get_item(pamh, PAM_TTY, (const void**)&item);
-	pam_syslog(pamh, LOG_ERR, "tty: %s", item);
-	pam_get_item(pamh, PAM_XDISPLAY, (const void**)&item);
-	pam_syslog(pamh, LOG_ERR, "xdisplay: %s", item);
-	char **envlist = pam_getenvlist(pamh);
 	
-	pam_syslog(pamh, LOG_ERR, "begin_env");
-	for(char **it = envlist; *it; it++){
-		pam_syslog(pamh, LOG_ERR, "env: %s", *it);
-	}
-	pam_syslog(pamh, LOG_ERR, "end_env");
 
 	int lockfd = open(options.lockfile, O_RDWR|O_CREAT|O_CLOEXEC, 0600);
 	if(lockfd == -1) return err(pamh, PAM_SYSTEM_ERR, "cannot open logfile");
