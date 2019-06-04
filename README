@@ -1,0 +1,7 @@
+Hack to avoid entering passwords into sudo
+instead press a configured button.
+
+the keyboard input is read from a /dev/input/... like file, so programs running
+as user should not be able to generate the event.
+
+something like this should be part of sudo, not a pam module
