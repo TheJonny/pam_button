@@ -4,4 +4,12 @@ instead press a configured button.
 the keyboard input is read from a /dev/input/... like file, so programs running
 as user should not be able to generate the event.
 
-something like this should be part of sudo, not a pam module
+something like this should be part of sudo, not a pam module.
+
+installation:
+make install
+
+usage: use a line like this in /etc/pam.d/sudo
+auth sufficient pam_button.so event_device=/dev/input/by-path/platform-thinkpad_acpi-event lockfile=/run/pam_button.lock keycode=148
+
+use evtest to choose the right event_device and keycode.
