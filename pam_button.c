@@ -8,6 +8,7 @@
 
 #include <sys/file.h>
 #include <sys/fcntl.h>
+#include <sys/select.h> 
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -41,6 +42,7 @@ bool parse_options(pam_handle_t *pamh, struct argv_options *options, int argc, c
 		if(strstr(argv[i], "keycode=") == argv[i]) options->keycode = (unsigned short)atoi(strchr(argv[i], '=')+1);
 		if(strstr(argv[i], "timeout=") == argv[i]) options->timeout = (unsigned short)atoi(strchr(argv[i], '=')+1);
 	}
+	if(options->timeout == 0) options->timeout = 5;
 
 	pam_syslog(pamh, LOG_INFO, "event_device=%s", options->event_device);
 	pam_syslog(pamh, LOG_INFO, "lockfile=%s", options->lockfile);
@@ -70,14 +72,40 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 	pam_prompt(pamh, PAM_TEXT_INFO, &response, "Please press the configured button");
 	free(response);
 
+
+	struct timeval timeout = {.tv_sec = options.timeout};
 	struct input_event ev = {};
+	bool ok = false;
 	for(;;){
+		// use select to wait for input or timeout
+		fd_set rfds;
+		FD_ZERO(&rfds);
+		FD_SET(fileno(f), &rfds);
+		// Linux specific: timeout is modified
+		int res = select(fileno(f)+1, &rfds, NULL, NULL, &timeout);
+		if(res == 0) break;
+		if(res == -1){
+			if(errno == EINTR) continue;
+			return err(pamh, PAM_SYSTEM_ERR, "select on event fd");
+		}
+		// no timeout, parse input.
 		if(fread(&ev, sizeof(ev), 1, f) != 1) return err(pamh, PAM_SYSTEM_ERR, "read from input device");
-		if(ev.type == EV_KEY && ev.code == options.keycode && ev.value == 1) break;
+		if(ev.type == EV_KEY && ev.code == options.keycode && ev.value == 1){
+		   ok = true;
+		   break;
+		}
+	}
+
+	if(!ok){
+		response = NULL;
+		pam_prompt(pamh, PAM_TEXT_INFO, &response, "Timed out. Keeping lock a second to ignore accidental presses");
+		free(response);
+		struct timeval second = {.tv_sec = 1};
+		select(0, NULL, NULL, NULL, &second);
 	}
 
 	close(lockfd);
-	return PAM_SUCCESS;
+	return ok ? PAM_SUCCESS : PAM_AUTH_ERR;
 }
 
 int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv){
