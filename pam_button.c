@@ -82,6 +82,9 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 		FD_ZERO(&rfds);
 		FD_SET(fileno(f), &rfds);
 		// Linux specific: timeout is modified
+#ifndef __linux__
+#error "FIXME: use portable way to decrement timeout"
+#endif
 		int res = select(fileno(f)+1, &rfds, NULL, NULL, &timeout);
 		if(res == 0) break;
 		if(res == -1){
