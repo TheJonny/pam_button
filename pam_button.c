@@ -9,6 +9,7 @@
 #include <sys/file.h>
 #include <sys/fcntl.h>
 #include <sys/select.h> 
+#include <sys/stat.h>
 
 #include <stdlib.h>
 #include <stdbool.h>
@@ -67,6 +68,25 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 
 	FILE *f = fopen(options.event_device, "rb");
 	if(f == NULL) return err(pamh, PAM_SYSTEM_ERR, "open input device");
+
+	// check for insecure permissions: if everyone could generate the required event
+	struct stat evstat;
+	if(fstat(fileno(f), &evstat) == 0){
+		if(evstat.st_mode & S_IWOTH) {
+			response = NULL;
+			pam_prompt(pamh, PAM_TEXT_INFO, &response, "insecure permissions on %s: writable for others", options.event_device);
+			free(response);
+			pam_syslog(pamh, LOG_WARNING, "insecure permissions on %s: writable for others", options.event_device);
+			return PAM_SERVICE_ERR;
+		}
+	}
+	else{
+		pam_syslog(pamh, LOG_WARNING, "could not fstat(%s): errno=%d", options.event_device, errno);
+		response = NULL;
+		pam_prompt(pamh, PAM_TEXT_INFO, &response, "could not fstat(%s): errno=%d", options.event_device, errno);
+		free(response);
+	}
+	
 
 	response = NULL;
 	pam_prompt(pamh, PAM_TEXT_INFO, &response, "Please press the configured button");
