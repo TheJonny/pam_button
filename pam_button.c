@@ -77,6 +77,7 @@ static bool parse_options(pam_handle_t *pamh, struct argv_options *options, int 
 		if(strstr(argv[i], "timeout=") == argv[i]) options->timeout = (unsigned short)atoi(strchr(argv[i], '=')+1);
 	}
 	if(options->timeout == 0) options->timeout = 5;
+	if(options->lockfile == NULL) options->lockfile = "/run/pam_button.lock";
 
 	pam_syslog(pamh, LOG_INFO, "event_device=%s", options->event_device);
 	pam_syslog(pamh, LOG_INFO, "lockfile=%s", options->lockfile);
@@ -92,7 +93,7 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 	
 
 	int lockfd = open(options.lockfile, O_RDWR|O_CREAT|O_CLOEXEC, 0600);
-	if(lockfd == -1) return err(pamh, PAM_SYSTEM_ERR, "cannot open logfile");
+	if(lockfd == -1) return err(pamh, PAM_SYSTEM_ERR, "cannot open lockfile");
 	
 	char *response = NULL;
 	pam_prompt(pamh, PAM_TEXT_INFO, &response, "Queueing for button");
