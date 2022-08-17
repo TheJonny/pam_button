@@ -51,7 +51,7 @@ static bool read_exact(int fd, void *buffer, size_t length) {
 	return true;
 }
 
-bool parse_options(pam_handle_t *pamh, struct argv_options *options, int argc, const char **argv){
+static bool parse_options(pam_handle_t *pamh, struct argv_options *options, int argc, const char **argv){
 	memset(options, 0, sizeof(*options));
 	for(int i=0; i<argc; i++){
 		if(strstr(argv[i], "event_device=") == argv[i]) options->event_device = strchr(argv[i], '=')+1;
