@@ -13,10 +13,10 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 
 #define TRACE(format, x) fprintf(stderr, "%s = "format"\n", #x, (x));
 
@@ -34,6 +34,22 @@ struct argv_options{
 	unsigned short keycode;
 	int timeout;
 };
+
+static bool read_exact(int fd, void *buffer, size_t length) {
+	size_t todo = length;
+	char *cursor = buffer;
+	while (todo) {
+		ssize_t res = read(fd, cursor, todo);
+		if(res <= 0) {
+			if (res == 0) errno = ERANGE;
+			return false;
+		}
+		assert((size_t)res <= todo);
+		todo -= (size_t)res;
+		cursor += res;
+	}
+	return true;
+}
 
 bool parse_options(pam_handle_t *pamh, struct argv_options *options, int argc, const char **argv){
 	memset(options, 0, sizeof(*options));
@@ -66,12 +82,12 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 	free(response);
 	if(flock(lockfd, LOCK_EX) == -1) return err(pamh, PAM_SYSTEM_ERR, "lock lockfile");
 
-	FILE *f = fopen(options.event_device, "rb");
-	if(f == NULL) return err(pamh, PAM_SYSTEM_ERR, "open input device");
+	int f = open(options.event_device, O_RDONLY);
+	if(f == -1) return err(pamh, PAM_SYSTEM_ERR, "open input device");
 
 	// check for insecure permissions: if everyone could generate the required event
 	struct stat evstat;
-	if(fstat(fileno(f), &evstat) == 0){
+	if(fstat(f, &evstat) == 0){
 		if(evstat.st_mode & S_IWOTH) {
 			response = NULL;
 			pam_prompt(pamh, PAM_TEXT_INFO, &response, "insecure permissions on %s: writable for others", options.event_device);
@@ -100,19 +116,19 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 		// use select to wait for input or timeout
 		fd_set rfds;
 		FD_ZERO(&rfds);
-		FD_SET(fileno(f), &rfds);
+		FD_SET(f, &rfds);
 		// Linux specific: timeout is modified
 #ifndef __linux__
 #error "FIXME: use portable way to decrement timeout"
 #endif
-		int res = select(fileno(f)+1, &rfds, NULL, NULL, &timeout);
+		int res = select(f+1, &rfds, NULL, NULL, &timeout);
 		if(res == 0) break;
 		if(res == -1){
 			if(errno == EINTR) continue;
 			return err(pamh, PAM_SYSTEM_ERR, "select on event fd");
 		}
 		// no timeout, parse input.
-		if(fread(&ev, sizeof(ev), 1, f) != 1) return err(pamh, PAM_SYSTEM_ERR, "read from input device");
+		if(!read_exact(f, &ev, sizeof(ev))) return err(pamh, PAM_SYSTEM_ERR, "read from input device");
 		if(ev.type == EV_KEY && ev.code == options.keycode && ev.value == 1){
 		   ok = true;
 		   break;
