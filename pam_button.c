@@ -95,10 +95,18 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 	int lockfd = open(options.lockfile, O_RDWR|O_CREAT|O_CLOEXEC, 0600);
 	if(lockfd == -1) return err(pamh, PAM_SYSTEM_ERR, "cannot open lockfile");
 	
-	char *response = NULL;
-	pam_prompt(pamh, PAM_TEXT_INFO, &response, "Queueing for button");
-	free(response);
-	if(flock(lockfd, LOCK_EX) == -1) return err(pamh, PAM_SYSTEM_ERR, "lock lockfile");
+	char *response;
+
+	// first, try to lock without blocking and without a verbose message
+	if(flock(lockfd, LOCK_EX | LOCK_NB) == -1) {
+		if (errno != EWOULDBLOCK) return err(pamh, PAM_SYSTEM_ERR, "lock lockfile");
+		response = NULL;
+		pam_prompt(pamh, PAM_TEXT_INFO, &response, "Attention: Another request is ongoing.\n"
+				"If you do not want to allow the other request, please wait for it's timeout to elapse.");
+		free(response);
+		if(flock(lockfd, LOCK_EX) == -1) return err(pamh, PAM_SYSTEM_ERR, "lock lockfile");
+	}
+	// here we have the lock
 
 	int f = open(options.event_device, O_RDONLY);
 	if(f == -1) return err(pamh, PAM_SYSTEM_ERR, "open input device");
