@@ -76,7 +76,7 @@ static bool parse_options(pam_handle_t *pamh, struct argv_options *options, int 
 		if(strstr(argv[i], "keycode=") == argv[i]) options->keycode = (unsigned short)atoi(strchr(argv[i], '=')+1);
 		if(strstr(argv[i], "timeout=") == argv[i]) options->timeout = (unsigned short)atoi(strchr(argv[i], '=')+1);
 	}
-	if(options->timeout == 0) options->timeout = 5;
+	if(options->timeout == 0) options->timeout = 20;
 	if(options->lockfile == NULL) options->lockfile = "/run/pam_button.lock";
 
 	pam_syslog(pamh, LOG_INFO, "event_device=%s", options->event_device);
@@ -123,7 +123,7 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char ** a
 	
 
 	response = NULL;
-	pam_prompt(pamh, PAM_TEXT_INFO, &response, "Please press the configured button");
+	pam_prompt(pamh, PAM_TEXT_INFO, &response, "Please press the configured button. (Timeout: %d seconds)", options.timeout);
 	free(response);
 
 
